@@ -1,0 +1,159 @@
+:root {
+  --bg: #ffffff;
+  --panel: #f4f4f4;
+  --text: #222;
+  --border: #ccc;
+  --accent: #2b6cb0;
+  --tag-bg: #e0e0e0;
+}
+
+[data-theme="dark"] {
+  --bg: #111;
+  --panel: #181818;
+  --text: #eee;
+  --border: #444;
+  --accent: #4ea3ff;
+  --tag-bg: #333;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s, color 0.3s;
+}
+
+h1,
+h2 {
+  margin-bottom: 0.3rem;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+label {
+  display: inline-block;
+  margin: 4px 0;
+}
+
+input,
+select {
+  margin-left: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+.row>div {
+  min-width: 160px;
+}
+
+button {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bucket {
+  border: 1px solid var(--border);
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--panel);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.bucket-info {
+  max-width: 70%;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--tag-bg);
+  margin-right: 4px;
+  font-size: 0.75rem;
+}
+
+.small {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+summary {
+  cursor: pointer;
+  padding: 6px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  body {
+    padding: 12px;
+  }
+
+  button {
+    width: 100%;
+    margin-top: 6px;
+  }
+
+  .bucket {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .bucket-info {
+    max-width: 100%;
+  }
+}
+
+/* Theme toggle */
+.theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.3s, border-color 0.3s;
+}

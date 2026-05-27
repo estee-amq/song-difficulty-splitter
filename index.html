@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AMQ Song Difficulty Splitter</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <div class="theme-toggle" id="themeToggle">🌙 Dark</div>
+
+  <h1>AMQ Song Difficulty Splitter</h1>
+
+  <div class="panel">
+    <h2>1. Load JSON files</h2>
+    <p class="small">Select one or more JSON files containing arrays of song objects.</p>
+    <input type="file" id="fileInput" multiple accept=".json" />
+    <div id="fileStatus" class="small"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Filters</h2>
+
+    <div class="row">
+      <div>
+        <label>
+          Difficulty min:
+          <input type="number" id="diffMin" value="0" />
+        </label>
+      </div>
+      <div>
+        <label>
+          Difficulty max:
+          <input type="number" id="diffMax" value="100" />
+        </label>
+      </div>
+      <div>
+        <label>
+          Max per JSON:
+          <input type="number" id="maxPerBucket" value="100" />
+        </label>
+      </div>
+    </div>
+
+    <div style="margin-top: 8px;">
+      <label>Song type:</label><br />
+      <label><input type="checkbox" class="songType" value="Opening" checked /> Opening</label>
+      <label><input type="checkbox" class="songType" value="Ending" checked /> Ending</label>
+      <label><input type="checkbox" class="songType" value="Insert" checked /> Insert</label>
+    </div>
+
+    <div style="margin-top: 8px;">
+      <label><input type="checkbox" id="includeRebroadcast" checked/> Include rebroadcast</label><br />
+      <label><input type="checkbox" id="includeDub" /> Include dub</label><br />
+      <label><input type="checkbox" id="includeMissing" /> Include missing files</label>
+    </div>
+
+    <div style="margin-top: 12px;">
+      <button id="generateBtn" disabled>Filter</button>
+      <span id="generateStatus" class="small"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>3. Output</h2>
+    <p class="small">Download individually, by type, or all at once.</p>
+
+    <button id="downloadAllBtn" disabled>Download All</button>
+
+    <div id="bucketsContainer" style="margin-top: 12px;"></div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
