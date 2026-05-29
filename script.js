@@ -28,9 +28,10 @@ function saveSettings() {
     songTypes: Array.from(document.querySelectorAll(".songType"))
       .filter(cb => cb.checked)
       .map(cb => cb.value),
+    includeRebroadcast: includeRebroadcast.checked,
     includeDub: includeDub.checked,
-    includeMissing: includeMissing.checked,
-    includeRebroadcast: includeRebroadcast.checked
+    ignoreDuplicates: ignoreDuplicates.checked,
+    includeMissing: includeMissing.checked
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
@@ -49,9 +50,10 @@ function loadSettings() {
       cb.checked = s.songTypes?.includes(cb.value) ?? true;
     });
 
-    includeDub.checked = s.includeDub ?? false;
-    includeMissing.checked = s.includeMissing ?? false;
     includeRebroadcast.checked = s.includeRebroadcast ?? true;
+    includeDub.checked = s.includeDub ?? false;
+    ignoreDuplicates.checked = s.ignoreDuplicates ?? false;
+    includeMissing.checked = s.includeMissing ?? false;
 
   } catch (e) {
     console.warn("Failed to load settings:", e);
@@ -62,7 +64,7 @@ loadSettings();
 
 const settingIds = [
   "diffMin", "diffMax", "maxPerBucket",
-  "includeDub", "includeMissing", "includeRebroadcast"
+  "includeRebroadcast", "includeDub", "ignoreDuplicates", "includeMissing"
 ];
 settingIds.forEach(id => {
   document.getElementById(id).addEventListener("change", saveSettings);
@@ -89,6 +91,15 @@ function matchesSongType(item, types) {
 
 function inRange(diff, min, max) {
   return diff >= min && diff <= max;
+}
+
+function removeDuplicatesByAmqId(items) {
+  const seen = new Set();
+  return items.filter(item => {
+    if (seen.has(item.amqSongId)) return false;
+    seen.add(item.amqSongId);
+    return true;
+  });
 }
 
 function chunk(arr, size) {
@@ -156,9 +167,10 @@ generateBtn.addEventListener("click", () => {
     songTypes: Array.from(document.querySelectorAll(".songType"))
       .filter(cb => cb.checked)
       .map(cb => cb.value),
+    includeRebroadcast: includeRebroadcast.checked,
     includeDub: includeDub.checked,
-    includeMissing: includeMissing.checked,
-    includeRebroadcast: includeRebroadcast.checked
+    ignoreDuplicates: ignoreDuplicates.checked,
+    includeMissing: includeMissing.checked
   };
 
   generateStatus.textContent = "Generating...";
@@ -177,23 +189,41 @@ function buildBuckets(config) {
     diffMax,
     maxPerBucket,
     songTypes,
+    includeRebroadcast,
     includeDub,
-    includeMissing,
-    includeRebroadcast
+    ignoreDuplicates,
+    includeMissing
   } = config;
 
+  // STEP 1 — Apply all filters FIRST
+  let filtered = items.filter(item => {
+    if (!matchesSongType(item, songTypes)) return false;
+
+    const diff = difficultyOf(item);
+    if (!inRange(diff, diffMin, diffMax)) return false;
+
+    if (!includeDub && item.isDub) return false;
+    if (!includeMissing && !hasAllFiles(item)) return false;
+    if (!includeRebroadcast && item.isRebroadcast) return false;
+
+    return true;
+  });
+
+  // STEP 2 — Deduplicate AFTER filtering
+  if (ignoreDuplicates) {
+    const seen = new Set();
+    filtered = filtered.filter(item => {
+      if (seen.has(item.amqSongId)) return false;
+      seen.add(item.amqSongId);
+      return true;
+    });
+  }
+
+  // STEP 3 — Continue with your existing bucket logic
   const buckets = [];
 
   for (const type of songTypes) {
-    const typeItems = items.filter(item => {
-      if (!matchesSongType(item, [type])) return false;
-      const diff = difficultyOf(item);
-      if (!inRange(diff, diffMin, diffMax)) return false;
-      if (!includeDub && item.isDub) return false;
-      if (!includeMissing && !hasAllFiles(item)) return false;
-      if (!includeRebroadcast && item.isRebroadcast) return false;
-      return true;
-    });
+    const typeItems = filtered.filter(item => matchesSongType(item, [type]));
 
     if (!typeItems.length) continue;
 
@@ -293,7 +323,7 @@ function renderCollapsibleBuckets(buckets) {
   bucketsContainer.innerHTML = "";
 
   if (!buckets.length) {
-    bucketsContainer.innerHTML = "<p class='small'>No buckets generated.</p>";
+    bucketsContainer.innerHTML = "<p class='small'>No JSON generated.</p>";
     return;
   }
 
@@ -316,7 +346,7 @@ function renderCollapsibleBuckets(buckets) {
     section.open = true;
 
     const summary = document.createElement("summary");
-    summary.textContent = `${type} (${byType[type].length} buckets)`;
+    summary.textContent = `${type} (${byType[type].length} JSON)`;
     section.appendChild(summary);
 
     const typeBtn = document.createElement("button");

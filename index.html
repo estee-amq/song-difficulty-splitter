@@ -13,7 +13,6 @@
 
   <div class="panel">
     <h2>1. Load JSON files</h2>
-    <p class="small">Select one or more JSON files containing arrays of song objects.</p>
     <input type="file" id="fileInput" multiple accept=".json" />
     <div id="fileStatus" class="small"></div>
   </div>
@@ -52,6 +51,7 @@
     <div style="margin-top: 8px;">
       <label><input type="checkbox" id="includeRebroadcast" checked/> Include rebroadcast</label><br />
       <label><input type="checkbox" id="includeDub" /> Include dub</label><br />
+      <label><input type="checkbox" id="ignoreDuplicates" /> Ignore duplicates</label><br />
       <label><input type="checkbox" id="includeMissing" /> Include missing files</label>
     </div>
 
@@ -63,7 +63,6 @@
 
   <div class="panel">
     <h2>3. Output</h2>
-    <p class="small">Download individually, by type, or all at once.</p>
 
     <button id="downloadAllBtn" disabled>Download All</button>
 
