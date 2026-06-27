@@ -31,7 +31,9 @@ function saveSettings() {
     includeRebroadcast: includeRebroadcast.checked,
     includeDub: includeDub.checked,
     ignoreDuplicates: ignoreDuplicates.checked,
-    includeMissing: includeMissing.checked
+    includeMissing: includeMissing.checked,
+    mixTypes: mixTypes.checked,
+    shuffleMode: shuffleMode.checked
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
@@ -54,6 +56,8 @@ function loadSettings() {
     includeDub.checked = s.includeDub ?? false;
     ignoreDuplicates.checked = s.ignoreDuplicates ?? false;
     includeMissing.checked = s.includeMissing ?? false;
+    mixTypes.checked = s.mixTypes ?? false;
+    shuffleMode.checked = s.shuffleMode ?? false;
 
   } catch (e) {
     console.warn("Failed to load settings:", e);
@@ -64,7 +68,8 @@ loadSettings();
 
 const settingIds = [
   "diffMin", "diffMax", "maxPerBucket",
-  "includeRebroadcast", "includeDub", "ignoreDuplicates", "includeMissing"
+  "includeRebroadcast", "includeDub", "ignoreDuplicates",
+  "includeMissing", "mixTypes", "shuffleMode"
 ];
 settingIds.forEach(id => {
   document.getElementById(id).addEventListener("change", saveSettings);
@@ -91,15 +96,6 @@ function matchesSongType(item, types) {
 
 function inRange(diff, min, max) {
   return diff >= min && diff <= max;
-}
-
-function removeDuplicatesByAmqId(items) {
-  const seen = new Set();
-  return items.filter(item => {
-    if (seen.has(item.amqSongId)) return false;
-    seen.add(item.amqSongId);
-    return true;
-  });
 }
 
 function chunk(arr, size) {
@@ -170,13 +166,23 @@ generateBtn.addEventListener("click", () => {
     includeRebroadcast: includeRebroadcast.checked,
     includeDub: includeDub.checked,
     ignoreDuplicates: ignoreDuplicates.checked,
-    includeMissing: includeMissing.checked
+    includeMissing: includeMissing.checked,
+    mixTypes: mixTypes.checked,
+    shuffleMode: shuffleMode.checked
   };
 
   generateStatus.textContent = "Generating...";
   bucketsContainer.innerHTML = "";
 
-  const buckets = buildBuckets(config);
+  let buckets;
+
+  if (config.shuffleMode && config.mixTypes) {
+    buckets = buildShuffledBuckets(config);
+  } else if (config.mixTypes) {
+    buckets = buildUnifiedBuckets(config);
+  } else {
+    buckets = buildBuckets(config);
+  }
 
   renderBuckets(buckets);
   generateStatus.textContent = `Generated ${buckets.length} JSON file(s).`;
@@ -195,7 +201,6 @@ function buildBuckets(config) {
     includeMissing
   } = config;
 
-  // STEP 1 — Apply all filters FIRST
   let filtered = items.filter(item => {
     if (!matchesSongType(item, songTypes)) return false;
 
@@ -209,7 +214,6 @@ function buildBuckets(config) {
     return true;
   });
 
-  // STEP 2 — Deduplicate AFTER filtering
   if (ignoreDuplicates) {
     const seen = new Set();
     filtered = filtered.filter(item => {
@@ -219,7 +223,6 @@ function buildBuckets(config) {
     });
   }
 
-  // STEP 3 — Continue with your existing bucket logic
   const buckets = [];
 
   for (const type of songTypes) {
@@ -292,15 +295,173 @@ function buildBuckets(config) {
   return buckets;
 }
 
+function buildUnifiedBuckets(config) {
+  const {
+    items,
+    diffMin,
+    diffMax,
+    maxPerBucket,
+    songTypes,
+    includeRebroadcast,
+    includeDub,
+    ignoreDuplicates,
+    includeMissing
+  } = config;
+
+  let filtered = items.filter(item => {
+    if (!matchesSongType(item, songTypes)) return false;
+
+    const diff = difficultyOf(item);
+    if (!inRange(diff, diffMin, diffMax)) return false;
+
+    if (!includeDub && item.isDub) return false;
+    if (!includeMissing && !hasAllFiles(item)) return false;
+    if (!includeRebroadcast && item.isRebroadcast) return false;
+
+    return true;
+  });
+
+  if (ignoreDuplicates) {
+    const seen = new Set();
+    filtered = filtered.filter(item => {
+      if (seen.has(item.amqSongId)) return false;
+      seen.add(item.amqSongId);
+      return true;
+    });
+  }
+
+  const byDifficulty = {};
+  for (const item of filtered) {
+    const d = difficultyOf(item);
+    if (!byDifficulty[d]) byDifficulty[d] = [];
+    byDifficulty[d].push(item);
+  }
+
+  const diffs = Object.keys(byDifficulty).map(Number).sort((a, b) => a - b);
+
+  const buckets = [];
+  let currentBucket = [];
+
+  for (const diff of diffs) {
+    const group = byDifficulty[diff];
+
+    if (group.length > maxPerBucket) {
+      const numParts = Math.ceil(group.length / maxPerBucket);
+      const partSize = Math.ceil(group.length / numParts);
+      const chunks = chunk(group, partSize);
+
+      chunks.forEach((chunkPart, idx) => {
+        buckets.push({
+          type: "Mixed",
+          items: chunkPart,
+          diffMin: diff,
+          diffMax: diff,
+          splitIndex: idx + 1,
+          splitTotal: chunks.length
+        });
+      });
+
+      continue;
+    }
+
+    if (currentBucket.length + group.length <= maxPerBucket) {
+      currentBucket.push(...group);
+    } else {
+      const diffsInBucket = currentBucket.map(i => difficultyOf(i));
+      buckets.push({
+        type: "Mixed",
+        items: currentBucket,
+        diffMin: Math.min(...diffsInBucket),
+        diffMax: Math.max(...diffsInBucket),
+        splitIndex: 0,
+        splitTotal: 1
+      });
+      currentBucket = [...group];
+    }
+  }
+
+  if (currentBucket.length > 0) {
+    const diffsInBucket = currentBucket.map(i => difficultyOf(i));
+    buckets.push({
+      type: "Mixed",
+      items: currentBucket,
+      diffMin: Math.min(...diffsInBucket),
+      diffMax: Math.max(...diffsInBucket),
+      splitIndex: 0,
+      splitTotal: 1
+    });
+  }
+
+  return buckets;
+}
+
+function buildShuffledBuckets(config) {
+  const {
+    items,
+    diffMin,
+    diffMax,
+    maxPerBucket,
+    songTypes,
+    includeRebroadcast,
+    includeDub,
+    ignoreDuplicates,
+    includeMissing
+  } = config;
+
+  let filtered = items.filter(item => {
+    if (!matchesSongType(item, songTypes)) return false;
+
+    const diff = difficultyOf(item);
+    if (!inRange(diff, diffMin, diffMax)) return false;
+
+    if (!includeDub && item.isDub) return false;
+    if (!includeMissing && !hasAllFiles(item)) return false;
+    if (!includeRebroadcast && item.isRebroadcast) return false;
+
+    return true;
+  });
+
+  if (ignoreDuplicates) {
+    const seen = new Set();
+    filtered = filtered.filter(item => {
+      if (seen.has(item.amqSongId)) return false;
+      seen.add(item.amqSongId);
+      return true;
+    });
+  }
+
+  for (let i = filtered.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+  }
+
+  const chunks = chunk(filtered, maxPerBucket);
+
+  return chunks.map((items, idx) => ({
+    type: "Shuffled",
+    items,
+    diffMin,
+    diffMax,
+    splitIndex: idx + 1,
+    splitTotal: chunks.length
+  }));
+}
+
 async function downloadAllBuckets(buckets, zipName = "all.zip") {
   const zip = new JSZip();
 
   buckets.forEach(b => {
-    const diffLabel = b.diffMin === b.diffMax
-      ? `${b.diffMin}`
-      : `${b.diffMin}-${b.diffMax}`;
+    const diffLabel =
+      b.diffMin == null || b.diffMax == null
+        ? ""
+        : b.diffMin === b.diffMax
+        ? `${b.diffMin}`
+        : `${b.diffMin}-${b.diffMax}`;
 
-    let name = `${b.type}_${diffLabel}`;
+    let name = `${b.type}`;
+    if (diffLabel) {
+      name += `_${diffLabel}`;
+    }
     if (b.splitTotal > 1) {
       name += `_part${b.splitIndex}`;
     }
@@ -335,8 +496,8 @@ function renderCollapsibleBuckets(buckets) {
 
   Object.values(byType).forEach(list => {
     list.sort((a, b) => {
-      if (a.diffMin !== b.diffMin) return a.diffMin - b.diffMin;
-      if (a.diffMax !== b.diffMax) return a.diffMax - b.diffMax;
+      if (a.diffMin !== b.diffMin) return (a.diffMin ?? 0) - (b.diffMin ?? 0);
+      if (a.diffMax !== b.diffMax) return (a.diffMax ?? 0) - (b.diffMax ?? 0);
       return a.splitIndex - b.splitIndex;
     });
   });
@@ -359,11 +520,17 @@ function renderCollapsibleBuckets(buckets) {
       const div = document.createElement("div");
       div.className = "bucket";
 
-      const diffLabel = b.diffMin === b.diffMax
-        ? `${b.diffMin}`
-        : `${b.diffMin}-${b.diffMax}`;
+      const diffLabel =
+        b.diffMin == null || b.diffMax == null
+          ? ""
+          : b.diffMin === b.diffMax
+          ? `${b.diffMin}`
+          : `${b.diffMin}-${b.diffMax}`;
 
-      let name = `${b.type}_${diffLabel}`;
+      let name = `${b.type}`;
+      if (diffLabel) {
+        name += `_${diffLabel}`;
+      }
       if (b.splitTotal > 1) {
         name += `_part${b.splitIndex}`;
       }
@@ -372,15 +539,23 @@ function renderCollapsibleBuckets(buckets) {
       const info = document.createElement("div");
       info.className = "bucket-info";
       info.innerHTML = `
-            <div>
-              <span class="tag">${b.type}</span>
-              <span class="tag">Diff: ${diffLabel}</span>
-              ${b.splitTotal > 1 ? `<span class="tag">Part ${b.splitIndex}/${b.splitTotal}</span>` : ""}
-            </div>
-            <div class="small">
-              ${b.items.length} item(s) — ${name}
-            </div>
-          `;
+        <div>
+          <span class="tag">${b.type}</span>
+          ${
+            diffLabel
+              ? `<span class="tag">Diff: ${diffLabel}</span>`
+              : ""
+          }
+          ${
+            b.splitTotal > 1
+              ? `<span class="tag">Part ${b.splitIndex}/${b.splitTotal}</span>`
+              : ""
+          }
+        </div>
+        <div class="small">
+          ${b.items.length} item(s) — ${name}
+        </div>
+      `;
 
       const btn = document.createElement("button");
       btn.textContent = "Download";
